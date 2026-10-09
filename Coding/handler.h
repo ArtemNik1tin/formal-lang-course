@@ -61,9 +61,34 @@ class Handler {
   void resolveWords();
 
   /// @brief Строит таблицу кодов и формирует результат свёртки.
-  /// @throws std::runtime_error При ошибке структуры или переполнении
-  /// диапазона кодов.
+  /// @throws std::runtime_error При ошибке структуры грамматики или
+  /// переполнении диапазона кодов.
   void encode();
+
+  /// @brief Проверяет структуру грамматики: парность скобок, порядок лексем
+  /// в правилах, завершение правила точкой и наличие Eofgram.
+  /// @throws std::runtime_error При нарушении структуры грамматики.
+  void validateStructure();
+
+  /// @brief Контролирует парность скобок `(`/`)` и `[`/`]`.
+  /// @param brackets Стек открытых скобок (изменяется).
+  /// @param kind Вид лексемы.
+  /// @param text Текст лексемы.
+  /// @throws std::runtime_error При непарной или несовпадающей скобке.
+  static void checkBrackets(std::vector<std::string>& brackets, Lexeme::Kind kind,
+                     const std::string& text);
+
+  /// @brief Переводит автомат в следующее состояние согласно лексеме.
+  /// @param kind Вид лексемы.
+  /// @param text Текст лексемы.
+  /// @param brackets Стек открытых скобок текущего правила.
+  /// @throws std::runtime_error При нарушении порядка лексем в правиле.
+  void advanceState(Lexeme::Kind kind, const std::string& text,
+                    const std::vector<std::string>& brackets);
+
+  /// @brief Присваивает лексемам коды по таблице и формирует строку вывода.
+  /// @throws std::runtime_error При переполнении диапазона кодов.
+  void encodeCodes();
 
   /// @brief Возвращает уже присвоенный код лексемы или присваивает следующий.
   /// @param key Ключ лексемы в таблице кодов (с префиксом категории).

@@ -192,68 +192,95 @@ int Handler::assignCode(const std::string& key, int& nextCode,
 void Handler::encode() {
   CodeTable.clear();
   result.clear();
-  currentState = State::NonTerminalIsExpected;
 
+  validateStructure();
+  encodeCodes();
+}
+
+void Handler::validateStructure() {
+  currentState = State::NonTerminalIsExpected;
+  std::vector<std::string> brackets;
+
+  for (const auto& [kind, text] : lexemes) {
+    checkBrackets(brackets, kind, text);
+    advanceState(kind, text, brackets);
+  }
+
+  if (currentState != State::FinalState) {
+    throw std::runtime_error("Eofgram was not found");
+  }
+}
+
+void Handler::checkBrackets(std::vector<std::string>& brackets,
+                            const Lexeme::Kind kind, const std::string& text) {
+  if (kind != Lexeme::Kind::Symbol) {
+    return;
+  }
+  if (text == "(" || text == "[") {
+    brackets.push_back(text);
+    return;
+  }
+  if (text != ")" && text != "]") {
+    return;
+  }
+
+  if (brackets.empty()) {
+    throw std::runtime_error("Unmatched '" + text + "'");
+  }
+  const bool closes = (text == ")" && brackets.back() == "(") ||
+                      (text == "]" && brackets.back() == "[");
+  if (!closes) {
+    throw std::runtime_error("Mismatched '" + text + "': '" + brackets.back() +
+                             "' is not closed by it");
+  }
+  brackets.pop_back();
+}
+
+void Handler::advanceState(const Lexeme::Kind kind, const std::string& text,
+                           const std::vector<std::string>& brackets) {
+  switch (currentState) {
+    case State::NonTerminalIsExpected:
+      if (kind == Lexeme::Kind::Eof) {
+        currentState = State::FinalState;
+      } else if (kind == Lexeme::Kind::NonTerminal) {
+        currentState = State::DelimiterIsExpected;
+      } else {
+        throw std::runtime_error("A nonterminal was expected but '" + text +
+                                 "' found");
+      }
+      break;
+    case State::DelimiterIsExpected:
+      if (kind != Lexeme::Kind::Symbol || text != ":") {
+        throw std::runtime_error("':' was expected but '" + text + "' found");
+      }
+      currentState = State::TerminalIsExpected;
+      break;
+    case State::TerminalIsExpected:
+      if (kind == Lexeme::Kind::Symbol && text == ".") {
+        if (!brackets.empty()) {
+          throw std::runtime_error("Unmatched '" + brackets.back() +
+                                   "' before the end of the rule");
+        }
+        currentState = State::NonTerminalIsExpected;
+      } else if (kind == Lexeme::Kind::Symbol && text == ":") {
+        throw std::runtime_error("':' is unexpected inside a rule body");
+      } else if (kind == Lexeme::Kind::Eof) {
+        throw std::runtime_error("Expected '.' before Eofgram");
+      }
+      break;
+    case State::FinalState:
+      throw std::runtime_error("Unexpected lexeme after Eofgram: " + text);
+    case State::FurtherProcessingIsNotPossible:
+      throw std::runtime_error("Further processing is not possible");
+  }
+}
+
+void Handler::encodeCodes() {
   int nextNonTerminal = 11;
   int nextTerminal = 51;
   int nextSemantic = 101;
 
-  std::vector<std::string> brackets;
-
   for (const auto& [kind, text] : lexemes) {
-    if (kind == Lexeme::Kind::Symbol) {
-      if (text == "(" || text == "[") {
-        brackets.push_back(text);
-      } else if (text == ")" || text == "]") {
-        if (brackets.empty()) {
-          throw std::runtime_error("Unmatched '" + text + "'");
-        }
-        const bool closes = (text == ")" && brackets.back() == "(") ||
-                            (text == "]" && brackets.back() == "[");
-        if (!closes) {
-          throw std::runtime_error("Mismatched '" + text + "': '" +
-                                   brackets.back() + "' is not closed by it");
-        }
-        brackets.pop_back();
-      }
-    }
-
-    switch (currentState) {
-      case State::NonTerminalIsExpected:
-        if (kind == Lexeme::Kind::Eof) {
-          currentState = State::FinalState;
-        } else if (kind == Lexeme::Kind::NonTerminal) {
-          currentState = State::DelimiterIsExpected;
-        } else {
-          throw std::runtime_error("A nonterminal was expected but '" + text +
-                                   "' found");
-        }
-        break;
-      case State::DelimiterIsExpected:
-        if (kind != Lexeme::Kind::Symbol || text != ":") {
-          throw std::runtime_error("':' was expected but '" + text + "' found");
-        }
-        currentState = State::TerminalIsExpected;
-        break;
-      case State::TerminalIsExpected:
-        if (kind == Lexeme::Kind::Symbol && text == ".") {
-          if (!brackets.empty()) {
-            throw std::runtime_error("Unmatched '" + brackets.back() +
-                                     "' before the end of the rule");
-          }
-          currentState = State::NonTerminalIsExpected;
-        } else if (kind == Lexeme::Kind::Symbol && text == ":") {
-          throw std::runtime_error("':' is unexpected inside a rule body");
-        } else if (kind == Lexeme::Kind::Eof) {
-          throw std::runtime_error("Expected '.' before Eofgram");
-        }
-        break;
-      case State::FinalState:
-        throw std::runtime_error("Unexpected lexeme after Eofgram: " + text);
-      case State::FurtherProcessingIsNotPossible:
-        throw std::runtime_error("Further processing is not possible");
-    }
-
     int code = 0;
     switch (kind) {
       case Lexeme::Kind::Symbol:
@@ -277,10 +304,6 @@ void Handler::encode() {
 
     result += std::to_string(code);
     result += '\n';
-  }
-
-  if (currentState != State::FinalState) {
-    throw std::runtime_error("Eofgram was not found");
   }
 }
 
