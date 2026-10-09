@@ -1,0 +1,2 @@
+A : ( x ; y )* [ $act 'sep' z ] .
+Eofgram
